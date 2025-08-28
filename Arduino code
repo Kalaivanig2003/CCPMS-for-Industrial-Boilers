@@ -1,0 +1,256 @@
+//ARDUINO CODE
+
+#include <WiFi.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <WiFiClientSecure.h>
+#include <DHT.h>
+#include <Arduino.h>
+#include <soc/rtc.h>
+
+//credentials for wifi connections
+const char* ssid = "Vishnu's Realme";
+const char* password = "vishnu22";
+const char* host = "script.google.com";
+const int httpsPort = 443;
+WiFiClientSecure client;
+const char* fingerprint = "4a2eb2a829129e1e0f4a06c744bab";
+String GAS_ID1 = "AKfycbxvDKahZcrpj-s_BXhHDJObMl9UY6Ajb7eHTdVgnGtqxnpodwKiWDbmnvTnnx8cu5JL";
+String GAS_ID2 = "AKfycbzdgxLojo759-m60pquk-DikrEYj3QLsyErFRZcCKfgtCxW1xhrwCFRvdn-_XWpwt6C";
+
+
+
+//variableDeclaration for all the temperature data
+int it1;
+int it2;
+int it3;
+
+//variableDeclaration for all the humidity data
+int ir1;
+int ir2;
+int ir3;
+//lcd declaration
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+
+//dht11 sensor declaration
+#define Temp1Pin 0// Change to the pin connected to DHT sensor
+#define Temp2Pin 4
+#define Temp3Pin 16
+#define DHTTYPE DHT11 
+#define DHTTYPE2 DHT22
+DHT dht1(Temp1Pin, DHTTYPE2);
+DHT dht2(Temp2Pin, DHTTYPE2);
+DHT dht3(Temp3Pin, DHTTYPE2);
+
+void setup(){
+  Serial.begin(115200);
+
+  Wire.begin();//initialize i2c protocol
+  lcd.init();
+  lcd.backlight();
+
+  dht1.begin();
+  dht2.begin();
+  dht3.begin();
+  //connecting to the internet
+  Serial.print("connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void loop(){
+  /*float h = random(30,50);
+  float t = random(50,70);
+  float w = random(70,90);
+  float r = random(100,150);
+  float b = random(80,100);*/
+  //int r1 = dht1.readHumidity();
+  int t1 = dht1.readTemperature();
+
+  //int r2 = dht2.readHumidity();
+  int t2 = dht2.readTemperature();
+
+  //int r3 = dht3.readHumidity();
+  int t3 = dht3.readTemperature();
+
+  
+
+
+  it1 = (int) t1;
+  it2 = (int) t2;
+  it3 = (int) t3;
+
+ // ir1 = (int) r1;
+  //ir2 = (int) r2;
+  //ir3 = (int) r3;
+  //ir4 = (int) r4;
+  //ir5 = (int) r5;
+  //printing data in the lcd display
+  lcd.setCursor(0,0);
+  lcd.print("T1:");
+  lcd.print(t1);
+
+  lcd.print(" T2:");
+  lcd.print(t2);
+
+  lcd.setCursor(0,1);
+  lcd.print("T3:");
+  lcd.print(t3);
+  //, it5, ir5
+  sendData(it1, ir1, it2, ir2, it3, ir3);
+  delay(100);
+}
+void sendData(int temp1, int hum1, int temp2, int hum2, int temp3, int hum3) {
+  client.setInsecure();
+  Serial.print("Connecting to ");
+  Serial.println(host);
+  
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed");
+    return;
+  }
+
+  uint8_t fingerprint_sha256[32];
+  client.getFingerprintSHA256(fingerprint_sha256);
+
+  String string_temperature1 = String(temp1, DEC); 
+  String string_temperature2 = String(temp2, DEC); 
+  String string_temperature3 = String(temp3, DEC);
+
+  String string_humidity1 = String(hum1, DEC); 
+  String string_humidity2 = String(hum2, DEC); 
+  String string_humidity3 = String(hum3, DEC); 
+  
+  String url1 = "/macros/s/" + GAS_ID1 + "/exec?temperature1=" + string_temperature1 + "&humidity1=" + string_humidity1 +"&temperature2=" + string_temperature2 + "&humidity2=" + string_humidity2 +"&temperature3=" + string_temperature3 + "&humidity3=" + string_humidity3 ;
+  String url2 = "/macros/s/" + GAS_ID2 + "/exec?temperature1=" + string_temperature1 + "&humidity1=" + string_humidity1 +"&temperature2=" + string_temperature2 + "&humidity2=" + string_humidity2 +"&temperature3=" + string_temperature3 + "&humidity3=" + string_humidity3 ;
+
+  // Send first request
+  client.print(String("GET ") + url1 + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "User-Agent: ESP32\r\n" +
+               "Connection: close\r\n\r\n");
+
+  Serial.print("Requesting URL1: ");
+  Serial.println(url1);
+
+  // Wait for response
+  while (client.connected()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") {
+      Serial.println("Headers received for URL1");
+      break;
+    }
+  }
+
+  String response1 = client.readStringUntil('\n');
+  Serial.println("Response for URL1: " + response1);
+
+  // Close connection
+  client.stop();
+
+  // Reconnect to send second request
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed for second request");
+    return;
+  }
+
+  // Send second request
+  client.print(String("GET ") + url2 + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "User-Agent: ESP32\r\n" +
+               "Connection: close\r\n\r\n");
+
+  Serial.print("Requesting URL2: ");
+  Serial.println(url2);
+
+  // Wait for response
+  while (client.connected()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") {
+      Serial.println("Headers received for URL2");
+      break;
+    }
+  }
+
+  String response2 = client.readStringUntil('\n');
+  Serial.println("Response for URL2: " + response2);
+
+  Serial.println("Closing connection for URL2");
+  client.stop();
+}
+
+//sending data to the google sheets//, int temp5, int hum5
+/*void sendData(int temp1, int hum1, int temp2, int hum2, int temp3, int hum3, int temp4, int hum4, int temp5, int hum5) {
+  client.setInsecure();
+  Serial.print("Connecting to ");
+  Serial.println(host);
+  
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed");
+    return;
+  }
+
+  uint8_t fingerprint_sha256[32];
+  client.getFingerprintSHA256(fingerprint_sha256);
+
+  String string_temperature1 =  String(temp1, DEC); 
+  String string_temperature2 =  String(temp2, DEC); 
+  String string_temperature3 =  String(temp3, DEC);
+  String string_temperature4 =  String(temp4, DEC);  
+  String string_temperature5 =  String(temp5, DEC); 
+
+  String string_humidity1 =  String(hum1, DEC); 
+  String string_humidity2 =  String(hum2, DEC); 
+  String string_humidity3 =  String(hum3, DEC); 
+  String string_humidity4 =  String(hum4, DEC); 
+  String string_humidity5 =  String(hum5, DEC); 
+
+  // +"&temperature5=" + string_temperature5 + "&humidity5=" + string_humidity5
+  String url1 = "/macros/s/" + GAS_ID1 + "/exec?temperature1=" + string_temperature1 + "&humidity1=" + string_humidity1 +"&temperature2=" + string_temperature2 + "&humidity2=" + string_humidity2 +"&temperature3=" + string_temperature3 + "&humidity3=" + string_humidity3 +"&temperature4=" + string_temperature4+ "&humidity4=" + string_humidity4+ "&temperature5=" + string_temperature5 + "&humidity5=" + string_humidity5;
+  Serial.print("Requesting URL: ");
+  Serial.println(url1);
+
+  String url2 = "/macros/s/" + GAS_ID2 + "/exec?temperature1=" + string_temperature1 + "&humidity1=" + string_humidity1 +"&temperature2=" + string_temperature2 + "&humidity2=" + string_humidity2 +"&temperature3=" + string_temperature3 + "&humidity3=" + string_humidity3 +"&temperature4=" + string_temperature4+ "&humidity4=" + string_humidity4+ "&temperature5=" + string_temperature5 + "&humidity5=" + string_humidity5;
+  Serial.print("Requesting URL: ");
+  Serial.println(url2);
+
+  client.print(String("GET ") + url1 + " HTTP/1.1\r\n" +
+         "Host: " + host + "\r\n" +
+         "User-Agent: BuildFailureDetectorESP32\r\n" +
+         "Connection: close\r\n\r\n");
+
+  Serial.println("Request sent");
+  while (client.connected()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") {
+      Serial.println("Headers received");
+      break;
+    }
+  }
+  
+  String line = client.readStringUntil('\n');
+  if (line.startsWith("{\"state\":\"success\"")) {
+    Serial.println("ESP32/Arduino CI successful!");
+  } else {
+    Serial.println("ESP32/Arduino CI has failed");
+  }
+
+  Serial.println("Reply was:");
+  Serial.println("==========");
+  Serial.println(line);
+  Serial.println("==========");
+  Serial.println("Closing connection");
+  
+  // Disconnect from the server
+  client.stop();
+}*/
+
